@@ -1,6 +1,5 @@
 var Fiber = require('fibers');
-// TODO: this is implementable with ES6 generators (node 0.11 under the --harmony flag) When generators make their
-// way into a stable node distribution, should replace fibers with the native generators
+// TODO: make me use an ES6 generator
 
 /**
  * Abstraction for a sequence, inspired by lazy evaluation and scala collections. Operations on a sequence can
@@ -8,11 +7,11 @@ var Fiber = require('fibers');
  * through iterable callbacks, or a final accumulator callback when their methods are invoked. Multiple {RIterables}
  * can be spawned (defined) concurrently, however {RIterable} methods must not be invoked concurrently!
  *
- * @param lineReader
+ * @param reader
  * @param Constructor
  * @constructor
  */
-function RSequencer (lineReader, Constructor) {
+function RSequencer (reader, Constructor) {
   var self = this;
 
   var context = {
@@ -27,7 +26,7 @@ function RSequencer (lineReader, Constructor) {
    * @param iterRef
    */
   var nextItemDefault = function (iterRef) {
-    lineReader.nextLine(function (line) {
+    reader.next(function (line) {
       iterRef(new Constructor(line));
     });
   };
@@ -43,23 +42,23 @@ function RSequencer (lineReader, Constructor) {
     return function (iterRef) {
       //restore defaults
       nextItem = nextItemDefault;
-      hasNextLine = lineReader.hasNextLine;
+      hasNext = reader.hasNext;
 
       iterRef(obj);
     };
   };
 
-  var hasNextLineHijacked = function ()  {
+  var hasNextHijacked = function ()  {
     return true;
   };
 
   //defaults, can be overwritten
   var nextItem = nextItemDefault,
-    hasNextLine = lineReader.hasNextLine;
+    hasNext = reader.hasNext;
 
   //main fiber co-routine
   var fiber = Fiber(function () {
-    while (hasNextLine()) {
+    while (hasNext()) {
       nextItem(context.iterRef);
       Fiber.yield();
     }
@@ -80,7 +79,7 @@ function RSequencer (lineReader, Constructor) {
 
     context.iterRef = function (obj) {
       nextItem = getNextItemHijackedFunction(obj);
-      hasNextLine = hasNextLineHijacked;
+      hasNext = hasNextHijacked;
 
       cb(obj);
     };
@@ -110,7 +109,7 @@ function RSequencer (lineReader, Constructor) {
 
       if (!ret) { //the precondition will fail, need to save the object somehow
         nextItem = getNextItemHijackedFunction(obj);
-        hasNextLine = hasNextLineHijacked;
+        hasNext = hasNextHijacked;
       }
 
       return ret;
